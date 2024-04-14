@@ -1,6 +1,5 @@
 // Copyright (c) FIRST and other WPILib contributors.
-// Open Source Software; you can modify and/or share it under the terms of
-// the WPILib BSD license file in the root directory of this project.
+// Open Source Software; you can modify and/or share it under the terms of the WPILib BSD license file in the root directory of this project.
 
 #pragma once
 
@@ -81,6 +80,13 @@ const frc::Translation2d k_fr_pos = frc::Translation2d(0.1778_m, 0.2873375_m);
 const frc::Translation2d k_bl_pos = frc::Translation2d(0.1778_m, 0.2873375_m);
 const frc::Translation2d k_br_pos = frc::Translation2d(0.1778_m, 0.2873375_m);
 
+constexpr auto k_max_vel_x = 1.0_mps;
+constexpr auto k_max_vel_y = 1.0_mps;
+constexpr auto k_max_vel_z = (units::radians_per_second_t)1.0;
+constexpr auto k_max_accel_x = 1.0_mps_sq;
+constexpr auto k_max_accel_y = 1.0_mps_sq;
+constexpr auto k_max_accel_z = (units::radians_per_second_squared_t)1.0;
+
 }
 
 namespace Shooter {
@@ -106,6 +112,9 @@ constexpr auto k_right_ff_kA = (ff_rot_accel)0.32495;
 
 constexpr auto k_ele_kP = 1.0;
 
+constexpr double k_pickup_setpoint = 1.0;
+constexpr double k_high_setpoint = 400.0;
+
 }
 
 namespace Hanger {
@@ -113,6 +122,16 @@ namespace Hanger {
 constexpr int k_pneumatics_hub_id = 10;
 constexpr int k_forward_id	  =  1;
 constexpr int k_reverse_id	  =  0;
+
+}
+
+namespace Positions {
+
+constexpr units::meter_t k_red_speaker_x = 8.308467_m;
+constexpr units::meter_t k_red_speaker_y = 1.442593_m;
+
+constexpr units::meter_t k_blue_speaker_x = -8.308975_m;
+constexpr units::meter_t k_blue_speaker_y = 1.442593_m;
 
 }
 

@@ -35,8 +35,10 @@ public:
 		return done;
 	}
 
-	frc2::CommandPtr track_command(std::function<units::meter_t()> setpoint);
-	frc2::CommandPtr track_elevator_command(double setpoint);
+	frc2::CommandPtr track_command(std::function<units::meter_t()> dist);
+	frc2::CommandPtr track_elevator_command(std::function<double()> setpoint);
+	frc2::CommandPtr shoot_command();
+	frc2::FunctionalCommand wait_shooter_command();
 	frc2::FunctionalCommand zero_command();
 	frc2::FunctionalCommand pickup_command();
 

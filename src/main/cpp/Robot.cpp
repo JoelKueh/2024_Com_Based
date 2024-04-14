@@ -6,6 +6,9 @@
 
 #include <frc2/command/CommandScheduler.h>
 
+// TODO: GET TEAM COLOR FROM DASHBOARD
+bool is_red = false;
+
 void Robot::RobotInit() {}
 
 /**

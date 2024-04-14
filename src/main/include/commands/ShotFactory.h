@@ -13,4 +13,11 @@ public:
 
 	frc2::CommandPtr teleop_shoot_command();
 	frc2::CommandPtr auto_shoot_command(frc::Pose2d shot_pos);
+
+private:
+	Drive *m_drive;
+	Shooter *m_shooter;
+
+	frc2::CommandPtr prep_teleop_shot_command();
+	frc2::CommandPtr prep_auto_shot_command(frc::Pose2d shot_pos);
 };

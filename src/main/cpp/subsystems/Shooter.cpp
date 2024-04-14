@@ -24,23 +24,34 @@ Shooter::Shooter()
 // This method will be called once per scheduler run
 void Shooter::Periodic() {}
 
-frc2::CommandPtr Shooter::track_command(std::function<units::meter_t()> distance)
+frc2::CommandPtr Shooter::track_command(std::function<units::meter_t()> dist)
 {
 	return this->Run(
-		[this, distance]() { track(distance()); }
+		[this, dist]() { track(dist()); }
 	);
 }
 
-frc2::CommandPtr Shooter::track_elevator_command(double setpoint)
+frc2::CommandPtr Shooter::track_elevator_command(std::function<double()> setpoint)
 {
 	return this->Run(
 		[this, setpoint]() {
 			double ele_power = m_ele_pid.Calculate(
 					m_ele_encoder.GetPosition(),
-					setpoint
+					setpoint()
 			);
 			m_ele_motor.SetVoltage((units::volt_t)ele_power);
 		}
+	);
+}
+
+frc2::CommandPtr Shooter::shoot_command()
+{
+	return frc2::cmd::Race(
+		this->Run([this]() {
+			m_top_motor.Set(1.0);
+			m_low_motor.Set(1.0);
+		}),
+		frc2::cmd::Wait(2.0_s)
 	);
 }
 
@@ -86,6 +97,24 @@ frc2::FunctionalCommand Shooter::pickup_command()
 	);
 
 	return pickup;
+}
+
+frc2::FunctionalCommand Shooter::wait_shooter_command()
+{
+	static frc2::FunctionalCommand command = frc2::FunctionalCommand(
+		[]() {},
+		[]() {},
+		[](bool interrupted) {},
+		[this]() {
+			bool ready = true;
+			ready = ready && m_left_pid.AtSetpoint();
+			ready = ready && m_right_pid.AtSetpoint();
+			ready = ready && m_ele_pid.AtSetpoint();
+			return ready;
+		}
+	);
+
+	return command;
 }
 
 void Shooter::track(units::meter_t dist)

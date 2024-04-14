@@ -11,6 +11,7 @@
 #include "subsystems/ExampleSubsystem.h"
 #include "subsystems/Drive.h"
 #include "subsystems/Shooter.h"
+#include "commands/ShotFactory.h"
 
 /**
  * This class is where the bulk of the robot should be declared.  Since
@@ -34,6 +35,7 @@ private:
 	ExampleSubsystem m_subsystem;
 	Drive m_drive;
 	Shooter m_shooter;
+	ShotFactory m_shots { &m_drive, &m_shooter };
 
 	void ConfigureBindings();
 };

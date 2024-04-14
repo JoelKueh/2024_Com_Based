@@ -3,8 +3,13 @@
 // the WPILib BSD license file in the root directory of this project.
 
 #include "subsystems/Drive.h"
-#include "frc2/command/Command.h"
-#include "frc2/command/Commands.h"
+#include "Constants.h"
+
+#include <frc2/command/Command.h>
+#include <frc2/command/Commands.h>
+#include <frc2/command/FunctionalCommand.h>
+
+extern bool is_red;
 
 Drive::Drive()
 {
@@ -78,6 +83,193 @@ frc2::CommandPtr Drive::drive_command(
 	);
 }
 
+frc2::CommandPtr Drive::track_position_command(frc::Pose2d goal)
+{
+	return this->Run([this, goal]() {
+		track_setpoint(goal);
+	});
+}
+
+frc2::CommandPtr Drive::track_target_command()
+{
+	return this->Run([this]() {
+		track_target();
+	});
+}
+
+frc2::CommandPtr Drive::track_angle_command(std::function<units::radian_t()> angle_error)
+{
+	return this->Run([this, angle_error]() {
+		track_angle(angle_error());
+	});
+};
+
+frc2::FunctionalCommand Drive::wait_for_pos_command()
+{
+	static auto command = frc2::FunctionalCommand(
+		[]() {},
+		[]() {},
+		[](bool interrupted) {},
+		[this]() {
+			bool finished = true;
+			finished = finished && x_profile.IsFinished(0.0_s);
+			finished = finished && y_profile.IsFinished(0.0_s);
+			finished = finished && z_profile.IsFinished(0.0_s);
+			return finished;
+		},
+		{this}
+	);
+
+	return command;
+}
+
+frc2::FunctionalCommand Drive::wait_for_angle_command()
+{
+	static auto command = frc2::FunctionalCommand(
+		[]() {},
+		[]() {},
+		[](bool interrupted) {},
+		[this]() {
+			return z_profile.IsFinished(0.0_s);
+		},
+		{this}
+	);
+
+	return command;
+}
+
+void Drive::track_setpoint(frc::Pose2d goal)
+{
+	auto robot_pos = m_estimator.GetEstimatedPosition();
+	auto wheel_speeds = get_wheel_speeds();
+	auto field_speed = frc::ChassisSpeeds::FromRobotRelativeSpeeds(
+		m_kinematics.ToChassisSpeeds(wheel_speeds),
+		robot_pos.Rotation()
+	);
+	auto angle_error = robot_pos.Rotation().Radians() - goal.Rotation().Radians();
+
+	if (angle_error < -(units::radian_t)M_PI) {
+		angle_error = angle_error + (units::radian_t)(2 * M_PI);
+	} else if (angle_error > (units::radian_t)M_PI) {
+		angle_error = angle_error - (units::radian_t)(2 * M_PI);
+	}
+
+	auto x_vel = x_profile.Calculate(
+		20_ms,
+		frc::TrapezoidProfile<units::meters>::State {
+			robot_pos.X(), field_speed.vx
+		},
+		frc::TrapezoidProfile<units::meters>::State {
+			goal.X(), 0.0_mps
+		}
+	);
+
+	auto y_vel = y_profile.Calculate(
+		20_ms,
+		frc::TrapezoidProfile<units::meters>::State {
+			robot_pos.Y(), field_speed.vy
+		},
+		frc::TrapezoidProfile<units::meters>::State {
+			goal.Y(), 0.0_mps
+		}
+	);
+
+	auto z_vel = z_profile.Calculate(
+		20_ms,
+		frc::TrapezoidProfile<units::radians>::State {
+			robot_pos.Rotation().Radians(), field_speed.omega
+		},
+		frc::TrapezoidProfile<units::radians>::State {
+			angle_error, 0.0_rad_per_s
+		}
+	);
+
+	auto new_vel = frc::ChassisSpeeds::FromFieldRelativeSpeeds(
+		x_vel.velocity,
+		y_vel.velocity,
+		z_vel.velocity,
+		robot_pos.Rotation().Radians()
+	);
+
+	auto [fl, fr, bl, br] = m_kinematics.ToWheelSpeeds(new_vel);
+	set_speeds(fl, fr, bl, br);
+}
+
+void Drive::track_target()
+{
+	auto pos = m_estimator.GetEstimatedPosition();
+	units::meter_t x_error, y_error;
+	x_error = Constants::Positions::k_red_speaker_x - pos.X();
+	y_error = Constants::Positions::k_red_speaker_y - pos.Y();
+	auto angle = (units::radian_t)atan(x_error.value() / y_error.value());
+	if (!is_red) {
+		angle = (units::radian_t)M_PI - angle;
+	}
+
+	units::radian_t angle_error;
+	angle_error = angle - pos.Rotation().Radians();
+	track_angle(angle_error);
+}
+
+void Drive::track_angle(units::radian_t angle_error)
+{
+	auto robot_pos = m_estimator.GetEstimatedPosition();
+	auto wheel_speeds = get_wheel_speeds();
+	auto robot_speed = m_kinematics.ToChassisSpeeds(wheel_speeds);
+
+	if (angle_error < -(units::radian_t)M_PI) {
+		angle_error = angle_error + (units::radian_t)(2 * M_PI);
+	} else if (angle_error > (units::radian_t)M_PI) {
+		angle_error = angle_error - (units::radian_t)(2 * M_PI);
+	}
+
+	auto z_vel = z_profile.Calculate(
+		20_ms,
+		frc::TrapezoidProfile<units::radians>::State {
+			robot_pos.Rotation().Radians(), robot_speed.omega
+		},
+		frc::TrapezoidProfile<units::radians>::State {
+			angle_error, 0.0_rad_per_s
+		}
+	);
+
+	auto new_vel = frc::ChassisSpeeds(0.0_mps, 0.0_mps, z_vel.velocity);
+	auto [fl, fr, bl, br] = m_kinematics.ToWheelSpeeds(new_vel);
+	set_speeds(fl, fr, bl, br);
+}
+
+void Drive::set_speeds(
+	units::meters_per_second_t fl,
+	units::meters_per_second_t fr,
+	units::meters_per_second_t bl,
+	units::meters_per_second_t br)
+{
+	auto fl_voltage = m_drive_ff.Calculate(fl);
+	fl_voltage += (units::volt_t)(m_fl_pid.Calculate(
+		m_fl_encoder.GetVelocity(), fl.value())
+	);
+
+	auto fr_voltage = m_drive_ff.Calculate(fr);
+	fr_voltage += (units::volt_t)(m_fr_pid.Calculate(
+		m_fr_encoder.GetVelocity(), fr.value())
+	);
+
+	auto bl_voltage = m_drive_ff.Calculate(bl);
+	bl_voltage += (units::volt_t)(m_bl_pid.Calculate(
+		m_bl_encoder.GetVelocity(), bl.value())
+	);
+
+	auto br_voltage = m_drive_ff.Calculate(br);
+	br_voltage += (units::volt_t)(m_br_pid.Calculate(
+		m_br_encoder.GetVelocity(), br.value())
+	);
+
+	m_fl_motor.SetVoltage(fl_voltage);
+	m_fr_motor.SetVoltage(fr_voltage);
+	m_bl_motor.SetVoltage(bl_voltage);
+	m_br_motor.SetVoltage(br_voltage);
+}
+
 /**
  * Another example of a command factory. This time we pass in functions
  * to get our directions before we drive.
@@ -133,4 +325,20 @@ frc2::CommandPtr Drive::estimate_position_subcommand()
 			);
 		}
 	);
+}
+
+units::meter_t Drive::get_target_dist()
+{
+	frc::Pose2d pos = m_estimator.GetEstimatedPosition();
+	units::meter_t dist, x, y;
+
+	if (is_red) {
+		x = Constants::Positions::k_red_speaker_x - pos.X();
+	} else {
+		x = Constants::Positions::k_blue_speaker_y - pos.X();
+	}
+	y = Constants::Positions::k_red_speaker_y - pos.Y();
+
+	dist = (units::meter_t)std::sqrt((x * x + y * y).value());
+	return dist;
 }

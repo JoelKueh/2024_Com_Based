@@ -5,6 +5,7 @@
 #pragma once
 
 #include "Constants.h"
+#include "frc2/command/FunctionalCommand.h"
 
 #include <vector>
 
@@ -16,6 +17,7 @@
 #include <frc/estimator/MecanumDrivePoseEstimator.h>
 #include <frc/ADIS16470_IMU.h>
 #include <frc/Timer.h>
+#include <frc/trajectory/TrapezoidProfile.h>
 #include <networktables/NetworkTableInstance.h>
 
 #include <rev/CANSparkMax.h>
@@ -36,6 +38,13 @@ public:
 			std::function<double(void)> strafe_power,
 			std::function<double(void)> rot_power
 	);
+	frc2::CommandPtr track_position_command(frc::Pose2d goal);
+	frc2::CommandPtr track_target_command();
+	frc2::CommandPtr track_angle_command(std::function<units::radian_t()> angle_error);
+	frc2::FunctionalCommand wait_for_pos_command();
+	frc2::FunctionalCommand wait_for_angle_command();
+
+	units::meter_t get_target_dist();
 
 private:
 	frc::MecanumDrive *m_mecanums;
@@ -98,12 +107,39 @@ private:
 		m_kinematics, 0.0_deg, init_wheel_pos, init_pos
 	};
 
+	frc::TrapezoidProfile<units::meter>::Constraints x_constr {
+		Constants::Drive::k_max_vel_x,
+		Constants::Drive::k_max_accel_x
+	};
+	frc::TrapezoidProfile<units::meter> x_profile { x_constr };
+
+	frc::TrapezoidProfile<units::meter>::Constraints y_constr {
+		Constants::Drive::k_max_vel_y,
+		Constants::Drive::k_max_accel_y
+	};
+	frc::TrapezoidProfile<units::meter> y_profile { y_constr };
+
+	frc::TrapezoidProfile<units::radian>::Constraints z_constr {
+		Constants::Drive::k_max_vel_z,
+		Constants::Drive::k_max_accel_z
+	};
+	frc::TrapezoidProfile<units::radian> z_profile { z_constr };
+
 	inline frc::MecanumDriveWheelPositions get_wheel_pos() {
 		return frc::MecanumDriveWheelPositions(
 			(units::meter_t)m_fl_encoder.GetPosition(),
 			(units::meter_t)m_fr_encoder.GetPosition(),
 			(units::meter_t)m_bl_encoder.GetPosition(),
 			(units::meter_t)m_br_encoder.GetPosition()
+		);
+	}
+
+	inline frc::MecanumDriveWheelSpeeds get_wheel_speeds() {
+		return frc::MecanumDriveWheelSpeeds(
+			(units::meters_per_second_t)m_fl_encoder.GetVelocity(),
+			(units::meters_per_second_t)m_fr_encoder.GetVelocity(),
+			(units::meters_per_second_t)m_bl_encoder.GetVelocity(),
+			(units::meters_per_second_t)m_br_encoder.GetVelocity()
 		);
 	}
 
@@ -125,7 +161,18 @@ private:
 	frc2::CommandPtr drive_subcommand(
 			std::function<double(void)> drive_power,
 			std::function<double(void)> strafe_power,
-			std::function<double(void)> rot_power);
+			std::function<double(void)> rot_power
+	);
 
 	frc2::CommandPtr estimate_position_subcommand();
+
+	void track_setpoint(frc::Pose2d goal);
+	void track_target();
+	void track_angle(units::radian_t angle_error);
+	void set_speeds(
+		units::meters_per_second_t fl,
+		units::meters_per_second_t fr,
+		units::meters_per_second_t bl,
+		units::meters_per_second_t br
+	);
 };
